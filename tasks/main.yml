@@ -38,11 +38,14 @@
 
 - block:
     - name: "Procstat Cloudwatch Agent Plugin | Write process config fragment {{ amz_cwagent_procstat_plugin_fragment_path }}"
-      copy:
-        content: "{{ amz_cwagent_procstat_plugin_fragment_contents }}"
+      template:
+        src: "{{ amz_cwagent_procstat_plugin_fragment_template }}"
         dest: "{{ amz_cwagent_procstat_plugin_fragment_path }}"
+        owner: root
+        group: root
+        mode: '0644'
       when: amz_cwagent_procstat_plugin_fragment_action == 'install'
-      failed_when: amz_cwagent_procstat_plugin_fragment_contents == ''
+      failed_when: amz_cwagent_procstat_plugin_fragment_match_string == ''
 
     - name: "Procstat Cloudwatch Agent Plugin | Remove process config fragment {{ amz_cwagent_procstat_plugin_fragment_path }}"
       file:

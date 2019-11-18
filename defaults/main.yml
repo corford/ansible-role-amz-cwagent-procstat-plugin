@@ -3,6 +3,7 @@ amz_cwagent_procstat_plugin_agent_ctl_bin: "/opt/aws/amazon-cloudwatch-agent/bin
 amz_cwagent_procstat_plugin_agent_mode: auto
 amz_cwagent_procstat_plugin_conf_src: "/opt/aws/amazon-cloudwatch-agent/etc/procstat-conf.d"
 amz_cwagent_procstat_plugin_conf_dst: "/opt/aws/amazon-cloudwatch-agent/etc/procstat.json"
+amz_cwagent_procstat_plugin_fragment_match_string: ""
 amz_cwagent_procstat_plugin_fragment_suffix: ""
-amz_cwagent_procstat_plugin_fragment_contents: ""
+amz_cwagent_procstat_plugin_fragment_template: "fragment.j2"
 amz_cwagent_procstat_plugin_fragment_action: install
