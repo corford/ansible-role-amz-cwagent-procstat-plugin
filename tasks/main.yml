@@ -1,0 +1,106 @@
+---
+- name: Procstat Cloudwatch Agent Plugin | Check Agent is installed
+  stat:
+    path: "{{ amz_cwagent_procstat_plugin_agent_ctl_bin }}"
+  register: amz_cwagent_procstat_agent
+  failed_when: amz_cwagent_procstat_agent.stat.exists == False
+  become: true
+
+- name: Procstat Cloudwatch Agent Plugin | Ensure config fragments dir exists
+  file:
+    path: "{{ amz_cwagent_procstat_plugin_conf_src }}"
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Procstat Cloudwatch Agent Plugin | Ensure config header fragment exists
+  copy:
+    src: files/header.conf
+    dest: "{{ amz_cwagent_procstat_plugin_conf_src }}/10_header.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+- name: Procstat Cloudwatch Agent Plugin | Ensure config footer fragment exists
+  copy:
+    src: files/footer.conf
+    dest: "{{ amz_cwagent_procstat_plugin_conf_src }}/30_footer.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+- set_fact:
+    amz_cwagent_procstat_plugin_fragment_path: "{{ amz_cwagent_procstat_plugin_conf_src }}/20_{{ amz_cwagent_procstat_plugin_fragment_suffix }}.conf"
+  failed_when: amz_cwagent_procstat_plugin_fragment_suffix == ''
+  become: true
+
+- block:
+    - name: "Procstat Cloudwatch Agent Plugin | Write process config fragment {{ amz_cwagent_procstat_plugin_fragment_path }}"
+      copy:
+        content: "{{ amz_cwagent_procstat_plugin_fragment_contents }}"
+        dest: "{{ amz_cwagent_procstat_plugin_fragment_path }}"
+      when: amz_cwagent_procstat_plugin_fragment_action == 'install'
+      failed_when: amz_cwagent_procstat_plugin_fragment_contents == ''
+
+    - name: "Procstat Cloudwatch Agent Plugin | Remove process config fragment {{ amz_cwagent_procstat_plugin_fragment_path }}"
+      file:
+        path: "{{ amz_cwagent_procstat_plugin_fragment_path }}"
+        state: absent
+      when: amz_cwagent_procstat_plugin_fragment_action == 'remove'
+
+    - name: Procstat Cloudwatch Agent Plugin | Backup existing procstat config
+      command: "mv {{ amz_cwagent_procstat_plugin_conf_dst }} {{ amz_cwagent_procstat_plugin_conf_dst }}.bak creates={{ amz_cwagent_procstat_plugin_conf_dst }}.bak removes={{ amz_cwagent_procstat_plugin_conf_dst }}"
+
+    - name: Procstat Cloudwatch Agent Plugin | Assemble new procstat config
+      assemble:
+        src: "{{ amz_cwagent_procstat_plugin_conf_src }}"
+        dest: "{{ amz_cwagent_procstat_plugin_conf_dst }}"
+        delimiter: ","
+      register: amz_cwagent_procstat_plugin_assemble
+
+    - name: Procstat Cloudwatch Agent Plugin | Fix JSON
+      shell: |
+        sed -i -e '/,/{s///;:a' -e '$!N;$!ba' -e '}' {{ amz_cwagent_procstat_plugin_conf_dst }}
+        sed -i -zr 's/,([^,]*$)/\1/' {{ amz_cwagent_procstat_plugin_conf_dst }}
+      args:
+        executable: /bin/bash
+        warn: false
+  
+  rescue:
+    - name: Procstat Cloudwatch Agent Plugin | Restore backup config
+      command: "mv {{ amz_cwagent_procstat_plugin_conf_dst }}.bak {{ amz_cwagent_procstat_plugin_conf_dst }} removes={{ amz_cwagent_procstat_plugin_conf_dst }}.bak"
+    
+    - name: Procstat Cloudwatch Agent Plugin | Halting due to error
+      command: /bin/false
+  become: true
+
+- block:
+    - name: Procstat Cloudwatch Agent Plugin | Count config fragments
+      find:
+        paths: "{{ amz_cwagent_procstat_plugin_conf_src }}"
+        patterns: '20_*'
+      register: amz_cwagent_procstat_plugin_fragments
+
+    - name: Procstat Cloudwatch Agent Plugin | Load changed procstat config
+      shell: "{{ amz_cwagent_procstat_plugin_agent_ctl_bin }} -a {{ (amz_cwagent_procstat_plugin_fragments.matched == 0) | ternary('remove', 'append') }}-config -m {{ amz_cwagent_procstat_plugin_agent_mode }} -c file:{{ amz_cwagent_procstat_plugin_conf_dst }} -s"
+      args:
+        executable: /bin/bash
+
+  rescue:
+    - name: Procstat Cloudwatch Agent Plugin | Restore backup config
+      command: "mv {{ amz_cwagent_procstat_plugin_conf_dst }}.bak {{ amz_cwagent_procstat_plugin_conf_dst }} creates={{ amz_cwagent_procstat_plugin_conf_dst }} removes={{ amz_cwagent_procstat_plugin_conf_dst }}.bak"
+  
+    - name: Procstat Cloudwatch Agent Plugin | Load restored procstat config
+      shell: "{{ amz_cwagent_procstat_plugin_agent_ctl_bin }} -a append-config -m {{ amz_cwagent_procstat_plugin_agent_mode }} -c file:{{ amz_cwagent_procstat_plugin_conf_dst }} -s"
+      args:
+        executable: /bin/bash
+  
+  always:
+    - name: Procstat Cloudwatch Agent Plugin | Cleanup
+      file:
+        path: "{{ amz_cwagent_procstat_plugin_conf_dst }}.bak"
+        state: absent
+
+  become: true
